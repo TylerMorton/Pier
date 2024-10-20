@@ -3,18 +3,15 @@ use doc_gen::{doc_cleanup, doc_file_parse};
 
 use dotenvy::dotenv;
 use openai::{
-    chat::{ChatCompletion, ChatCompletionMessage, ChatCompletionMessageRole},
+    chat::{ChatCompletionMessage, ChatCompletionMessageRole},
     set_base_url, set_key,
 };
 use std::fs::{read_dir, File};
-use std::process::Command;
-use std::{
-    env,
-    io::Read,
-};
+use std::path::Path;
+use std::process;
+use std::{env, io::Read};
 
-use clap::Parser;
-
+use clap::{Arg, Command, Parser};
 
 // Hardcoded ignore list
 
@@ -51,7 +48,9 @@ fn chat_history_setup_fn_list() -> Vec<ChatCompletionMessage> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // todo timeout or the thing might never end
-    let args = Args::parse();
+    //
+
+    //let args = Args::parse();
     let ignore_list = vec![
         "benches".to_string(),
         ".git".to_string(),
@@ -66,44 +65,111 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     set_key(env::var("OPENAI_API_KEY").unwrap());
     set_base_url("https://api.openai.com/v1".to_string());
 
-    let _output = Command::new("sh")
-        .arg("-c")
-        .arg("pip install mkdocs")
-        .output()
-        .expect("failed to execute process");
+    let matches = Command::new("Knock")
+        .version("1.0")
+        .subcommand(
+            Command::new("generate").about("Generates documention").arg(
+                Arg::new("dir-path")
+                    .long("dir-path")
+                    //.takes_value(true)
+                    .required(true)
+                    .help("Directory path to project"),
+            ),
+        )
+        .subcommand(
+            Command::new("serve")
+                .about("Serves files from the specified directory")
+                .arg(
+                    Arg::new("folder")
+                        //.takes_value(true)
+                        .required(true)
+                        .help("Serve documentation live"),
+                ),
+        )
+        .get_matches();
 
-    let _output = Command::new("sh")
-        .arg("-c")
-        .arg("mkdocs new .")
-        .output()
-        .expect("failed to execute process");
+    match matches.subcommand() {
+        //subcommand() {
+        Some(("generate", sub_m)) => {
+            let dir_path: String = sub_m
+                .get_one::<String>("dir-path")
+                .expect("dir-path required")
+                .to_owned();
+            println!("{}", dir_path);
 
-    let dir_path = args.dir_path;
-    let mut dir_list = vec![dir_path];
+            let _output = process::Command::new("sh")
+                .arg("-c")
+                .arg("pip install mkdocs")
+                .output()
+                .expect("failed to execute process");
 
-    //let mut messages: Vec<ChatCompletionMessage> = Vec::new();
-    let mut messages: Vec<ChatCompletionMessage> = chat_history_setup();
-    //let fn_list_msgs: Vec<ChatCompletionMessage> = chat_history_setup_fn_list();
+            let _output = process::Command::new("sh")
+                .arg("-c")
+                .arg("mkdocs new .")
+                .output()
+                .expect("failed to execute process");
 
-    while let Some(dir) = dir_list.pop() {
-        for entry in read_dir(dir).unwrap() {
-            if let Ok(entry) = entry {
-                let f_type = entry.file_type().unwrap();
-                if f_type.is_dir() {
-                    if !ignore_list.contains(&entry.file_name().to_str().unwrap().to_string()) {
-                        dir_list.push(entry.path().to_str().unwrap().to_string());
+            //   let dir_path = args.dir_path;
+            let mut dir_list = vec![dir_path];
+
+            //let mut messages: Vec<ChatCompletionMessage> = Vec::new();
+            let mut messages: Vec<ChatCompletionMessage> = chat_history_setup();
+            //let fn_list_msgs: Vec<ChatCompletionMessage> = chat_history_setup_fn_list();
+
+            while let Some(dir) = dir_list.pop() {
+                for entry in read_dir(dir).unwrap() {
+                    if let Ok(entry) = entry {
+                        let f_type = entry.file_type().unwrap();
+                        if f_type.is_dir() {
+                            if !ignore_list
+                                .contains(&entry.file_name().to_str().unwrap().to_string())
+                            {
+                                dir_list.push(entry.path().to_str().unwrap().to_string());
+                            }
+                        }
+                        if f_type.is_file() {
+                            messages = doc_file_parse(messages, entry).await?;
+                        }
                     }
                 }
-                if f_type.is_file() {
-                    messages = doc_file_parse(messages, entry).await?;
-                }
             }
+            let mut file = File::open("docs/docs.md")?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            let _ = doc_cleanup(contents).await;
+
+            Ok(())
+        }
+        Some(("serve", sub_m)) => {
+            let folder = sub_m
+                .get_one::<String>("folder")
+                .expect("Expected folder path");
+            let current_dir = env::current_dir().expect("Failed to get cwd");
+            println!("Serving on http://127.0.0.1:8000/");
+
+            let mkdocs_output = process::Command::new("mkdocs")
+                .arg("serve")
+                .current_dir(Path::new(folder))
+                //.current_dir(&current_dir)
+                .output()
+                .expect("failed to execute process");
+
+            if mkdocs_output.status.success() {
+                println!(
+                    "MkDocs output: {}",
+                    String::from_utf8_lossy(&mkdocs_output.stdout)
+                );
+            } else {
+                eprintln!(
+                    "MkDocs error: {}",
+                    String::from_utf8_lossy(&mkdocs_output.stderr)
+                );
+            }
+            Ok(())
+        }
+        _ => {
+            println!("No valid subcommand provided");
+            Ok(())
         }
     }
-    let mut file = File::open("docs/docs.md")?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    let _ = doc_cleanup(contents).await;
-
-    Ok(())
 }
