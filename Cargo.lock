@@ -640,20 +640,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "knock"
-version = "0.1.0"
-dependencies = [
- "clap",
- "dotenvy",
- "openai",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.161"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -861,6 +847,20 @@ name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
+
+[[package]]
+name = "pier"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "dotenvy",
+ "openai",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "pin-project-lite"

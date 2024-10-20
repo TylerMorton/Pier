@@ -1,15 +1,18 @@
 mod doc_gen;
-use doc_gen::{doc_cleanup, doc_file_parse};
+use doc_gen::{doc_cleanup, doc_file_parse, welcome_doc};
 
 use dotenvy::dotenv;
 use openai::{
     chat::{ChatCompletionMessage, ChatCompletionMessageRole},
     set_base_url, set_key,
 };
-use std::fs::{read_dir, File};
+use std::fs::{read_dir, remove_file, File};
 use std::path::Path;
 use std::process;
-use std::{env, io::Read};
+use std::{
+    env,
+    io::{Read, Write},
+};
 
 use clap::{Arg, Command, Parser};
 
@@ -52,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     //let args = Args::parse();
     let ignore_list = vec![
+        "docs.".to_string()
         "benches".to_string(),
         ".git".to_string(),
         ".gitignore".to_string(),
@@ -71,7 +75,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Command::new("generate").about("Generates documention").arg(
                 Arg::new("dir-path")
                     .long("dir-path")
-                    //.takes_value(true)
                     .required(true)
                     .help("Directory path to project"),
             ),
@@ -81,7 +84,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .about("Serves files from the specified directory")
                 .arg(
                     Arg::new("folder")
-                        //.takes_value(true)
                         .required(true)
                         .help("Serve documentation live"),
                 ),
@@ -89,13 +91,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get_matches();
 
     match matches.subcommand() {
-        //subcommand() {
         Some(("generate", sub_m)) => {
             let dir_path: String = sub_m
                 .get_one::<String>("dir-path")
                 .expect("dir-path required")
                 .to_owned();
-            println!("{}", dir_path);
 
             let _output = process::Command::new("sh")
                 .arg("-c")
@@ -116,6 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut messages: Vec<ChatCompletionMessage> = chat_history_setup();
             //let fn_list_msgs: Vec<ChatCompletionMessage> = chat_history_setup_fn_list();
 
+            println!("Files processed:");
             while let Some(dir) = dir_list.pop() {
                 for entry in read_dir(dir).unwrap() {
                     if let Ok(entry) = entry {
@@ -128,6 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         if f_type.is_file() {
+                            println!("{}", entry.file_name().to_str().unwrap().to_string());
                             messages = doc_file_parse(messages, entry).await?;
                         }
                     }
@@ -137,6 +139,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
             let _ = doc_cleanup(contents).await;
+            let _ = remove_file("docs/docs.md").unwrap();
+            println!("\n\nDocumentation generated!");
+            let _ = remove_file("docs/index.md");
+            let mut file = File::create("docs/index.md")?;
+            let _ = file.write(welcome_doc().as_bytes());
 
             Ok(())
         }
@@ -154,21 +161,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .output()
                 .expect("failed to execute process");
 
-            if mkdocs_output.status.success() {
-                println!(
-                    "MkDocs output: {}",
-                    String::from_utf8_lossy(&mkdocs_output.stdout)
-                );
-            } else {
-                eprintln!(
-                    "MkDocs error: {}",
-                    String::from_utf8_lossy(&mkdocs_output.stderr)
-                );
-            }
             Ok(())
         }
         _ => {
-            println!("No valid subcommand provided");
+            println!("No valid subcommand provided. pier [generate | serve]");
             Ok(())
         }
     }

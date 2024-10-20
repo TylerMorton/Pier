@@ -11,11 +11,22 @@ use openai::{
     set_base_url, set_key,
 };
 
+pub fn welcome_doc() -> String {
+    String::from(
+        "
+# Welcome to your Project's Documentation
+Generated from Pier!
+
+Check out the project [here](https://github.com/TylerMorton/Pier).
+        ",
+    )
+}
+
 pub async fn doc_cleanup(doc_contents: String) -> Result<(), Box<dyn std::error::Error>> {
     let cleanup_sys_prompt = vec![ChatCompletionMessage {
         role: ChatCompletionMessageRole::System,
         content: Some(
-            "Format the document to be a formal library document in markdown. Make sure there is consistency throughout the whole document. Have the functions that were header 2 as code blocks instead of as headers."
+            "Format the document to be a formal library document in markdown. Make sure there is consistency throughout the whole document. Have a short title about the library and it's functionality. Have the functions that originally had header 2 as code blocks instead of as headers with their parameters."
                 .to_string(),
         ),
         name: None,
@@ -36,8 +47,7 @@ pub async fn doc_cleanup(doc_contents: String) -> Result<(), Box<dyn std::error:
 
     let returned_message = chat_completion.choices.first().unwrap().message.clone();
 
-    println!("cleanup entered");
-    let mut docs = File::create("docs/docs_revised.md")?;
+    let mut docs = File::create("docs/library.md")?;
 
     let _ = docs.write(returned_message.content.clone().unwrap().trim().as_bytes());
     Ok(())
@@ -51,7 +61,6 @@ pub async fn doc_file_parse(
 ) -> Result<Vec<ChatCompletionMessage>, Box<dyn std::error::Error>> {
     //messages.append(&mut chat_history_setup());
     let mut file = File::open(entry.path().to_str().unwrap())?;
-    println!("file: {:?}", file);
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
     // Make sure you have a file named `.env` with the `OPENAI_KEY` environment variable defined!
@@ -83,7 +92,6 @@ pub async fn doc_file_parse(
         .create(true)
         .open("docs/docs.md")?;
 
-    println!("file: {}", entry.path().to_str().unwrap());
     let returned_msg = returned_message.content.clone().unwrap();
     let returned_msg = returned_msg.trim();
     if returned_msg.contains("SKIP") {
